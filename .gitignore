@@ -25,3 +25,4 @@ ENV/
 consume/*
 images/*
 texts/*
+*.sqlite3
