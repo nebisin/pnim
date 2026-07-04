@@ -93,6 +93,10 @@ class WatchConsumeTests(unittest.TestCase):
         content = self.module.extract_chat_content({"message": {"content": " hello "}})
         self.assertEqual(content, "hello")
 
+    def test_extract_chat_content_accepts_object_payload(self):
+        content = self.module.extract_chat_content(FakeChatResponse(" hello "))
+        self.assertEqual(content, "hello")
+
     def test_extract_chat_content_rejects_invalid_payload(self):
         with self.assertRaisesRegex(RuntimeError, "unsupported chat response payload"):
             self.module.extract_chat_content({"message": {"content": None}})
@@ -155,6 +159,28 @@ class WatchConsumeTests(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["content"], "alpha")
         self.assertAlmostEqual(results[0]["score"], 1.0)
+
+    def test_semantic_search_rejects_invalid_inputs(self):
+        with self.assertRaisesRegex(ValueError, "query must not be empty"):
+            self.module.semantic_search("   ")
+
+        with self.assertRaisesRegex(ValueError, "limit must be at least 1"):
+            self.module.semantic_search("alpha", limit=0)
+
+    def test_semantic_search_returns_empty_when_model_has_no_rows(self):
+        self.module.ensure_directories()
+        pdf_path = self.module.CONSUME_DIR / "sample.pdf"
+        pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        pdf_path.write_bytes(b"%PDF-1.4")
+
+        text_path = self.module.write_markdown(pdf_path, 1, "alpha")
+        self.module.save_embedding(pdf_path, 1, text_path, "alpha", [1.0, 0.0])
+        self.module.EMBEDDING_MODEL = "other-model"
+
+        with mock.patch.object(self.module, "embed_text", return_value=[1.0, 0.0]):
+            results = self.module.semantic_search("find alpha", limit=1)
+
+        self.assertEqual(results, [])
 
     def test_generate_rag_answer_uses_rag_model(self):
         self.module.OLLAMA_CLIENT.chat_content = "grounded answer"

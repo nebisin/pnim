@@ -33,6 +33,7 @@ API_HOST = os.environ.get("API_HOST", "127.0.0.1")
 API_PORT = int(os.environ.get("API_PORT", "8080"))
 APP_MODE = os.environ.get("APP_MODE", "watch")
 DEFAULT_SEARCH_LIMIT = int(os.environ.get("DEFAULT_SEARCH_LIMIT", "5"))
+API_ACCESS_LOGS = os.environ.get("API_ACCESS_LOGS", "").lower() in {"1", "true", "yes", "on"}
 OCR_PROMPT = (
     "Extract all text from the image and return clean markdown only. "
     "Preserve headings, lists, tables, and reading order as faithfully as possible."
@@ -330,6 +331,7 @@ def handle_search_request(request_payload: object) -> dict[str, object]:
         raise ValueError("query must be a non-empty string")
 
     limit = request_payload.get("limit", DEFAULT_SEARCH_LIMIT)
+    # bool is a subclass of int in Python, so explicitly reject it.
     if not isinstance(limit, int) or isinstance(limit, bool):
         raise ValueError("limit must be an integer")
 
@@ -375,8 +377,9 @@ class SearchApiHandler(BaseHTTPRequestHandler):
         self.write_json(response_payload, HTTPStatus.OK)
 
     def log_message(self, fmt: str, *args: object) -> None:
-        """Suppress default HTTP request logging to keep CLI output focused."""
-        pass
+        """Suppress request logs by default, but allow opt-in access logs via env var."""
+        if API_ACCESS_LOGS:
+            super().log_message(fmt, *args)
 
     def write_json(self, payload: dict[str, object], status: HTTPStatus) -> None:
         body = json.dumps(payload).encode("utf-8")
