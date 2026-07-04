@@ -85,6 +85,7 @@ curl -X POST http://127.0.0.1:8080/api/search \
 - `APP_MODE` — `watch` for the PDF watcher or `api` for the HTTP server, defaults to `watch`
 - `API_HOST` — API bind host, defaults to `127.0.0.1`
 - `API_PORT` — API bind port, defaults to `8080`
+- `API_ACCESS_LOGS` — enable access logs when set to 1/true/yes/on, defaults to disabled
 - `DEFAULT_SEARCH_LIMIT` — default number of retrieved chunks, defaults to `5`
 
 Example:
