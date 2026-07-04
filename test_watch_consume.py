@@ -93,6 +93,10 @@ class WatchConsumeTests(unittest.TestCase):
         content = self.module.extract_chat_content({"message": {"content": " hello "}})
         self.assertEqual(content, "hello")
 
+    def test_extract_chat_content_rejects_invalid_payload(self):
+        with self.assertRaisesRegex(RuntimeError, "unsupported chat response payload"):
+            self.module.extract_chat_content({"message": {"content": None}})
+
     def test_initialize_database_is_idempotent(self):
         self.module.initialize_embedding_database()
         self.module.initialize_embedding_database()

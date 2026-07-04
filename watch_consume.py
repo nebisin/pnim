@@ -349,7 +349,10 @@ def handle_search_request(request_payload: object) -> dict[str, object]:
 
 
 class SearchApiHandler(BaseHTTPRequestHandler):
+    """Handle POST /api/search requests for semantic search and RAG."""
+
     def do_POST(self) -> None:  # noqa: N802
+        """Accept JSON with query/limit/include_answer and return JSON search results."""
         if self.path != "/api/search":
             self.send_error(HTTPStatus.NOT_FOUND, "Not found")
             return
@@ -372,6 +375,7 @@ class SearchApiHandler(BaseHTTPRequestHandler):
         self.write_json(response_payload, HTTPStatus.OK)
 
     def log_message(self, fmt: str, *args: object) -> None:
+        """Suppress default HTTP request logging to keep CLI output focused."""
         pass
 
     def write_json(self, payload: dict[str, object], status: HTTPStatus) -> None:
