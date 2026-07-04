@@ -1,9 +1,13 @@
+import http.client
 import importlib
+import json
 import sqlite3
 import sys
 import tempfile
+import threading
 import types
 import unittest
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
@@ -214,6 +218,100 @@ class WatchConsumeTests(unittest.TestCase):
             response = self.module.handle_search_request({"query": "alpha"})
 
         self.assertEqual(response, {"query": "alpha", "results": [{"content": "alpha"}], "answer": "answer"})
+
+
+class SearchApiHandlerTests(unittest.TestCase):
+    TEST_HOST = "127.0.0.1"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.module = load_watch_consume()
+        cls.temp_dir = tempfile.TemporaryDirectory()
+        root = Path(cls.temp_dir.name)
+        cls.module.CONSUME_DIR = root / "consume"
+        cls.module.IMAGES_DIR = root / "images"
+        cls.module.TEXTS_DIR = root / "texts"
+        cls.module.EMBEDDINGS_DB_PATH = root / "text_embeddings.sqlite3"
+        cls.module.OLLAMA_CLIENT = FakeClient(host="http://localhost:11434")
+        cls.server = ThreadingHTTPServer((cls.TEST_HOST, 0), cls.module.SearchApiHandler)
+        cls.port = cls.server.server_address[1]
+        cls.server_thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.server_thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.temp_dir.cleanup()
+
+    def _post(self, path, body=None, raw_body=None):
+        conn = http.client.HTTPConnection(self.TEST_HOST, self.port)
+        if raw_body is not None:
+            encoded = raw_body
+        elif body is not None:
+            encoded = json.dumps(body).encode()
+        else:
+            encoded = b""
+        conn.request(
+            "POST",
+            path,
+            body=encoded,
+            headers={"Content-Length": str(len(encoded)), "Content-Type": "application/json"},
+        )
+        resp = conn.getresponse()
+        status = resp.status
+        raw = resp.read()
+        conn.close()
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            data = None
+        return status, data
+
+    def test_unknown_path_returns_404(self):
+        status, _ = self._post("/not/found")
+        self.assertEqual(status, 404)
+
+    def test_invalid_json_returns_400(self):
+        status, data = self._post("/api/search", raw_body=b"not json {")
+        self.assertEqual(status, 400)
+        self.assertIn("valid JSON", data["error"])
+
+    def test_missing_query_returns_400(self):
+        status, data = self._post("/api/search", body={})
+        self.assertEqual(status, 400)
+        self.assertIn("query", data["error"])
+
+    def test_limit_too_large_returns_400(self):
+        status, data = self._post("/api/search", body={"query": "test", "limit": 100})
+        self.assertEqual(status, 400)
+        self.assertIn("limit", data["error"])
+
+    def test_include_answer_false_omits_answer(self):
+        with mock.patch.object(self.module, "semantic_search", return_value=[{"content": "c"}]):
+            status, data = self._post("/api/search", body={"query": "test", "include_answer": False})
+        self.assertEqual(status, 200)
+        self.assertNotIn("answer", data)
+        self.assertEqual(data["results"], [{"content": "c"}])
+
+    def test_runtime_error_returns_502(self):
+        with mock.patch.object(
+            self.module, "handle_search_request", side_effect=RuntimeError("db failure")
+        ):
+            status, data = self._post("/api/search", body={"query": "test"})
+        self.assertEqual(status, 502)
+        self.assertIn("db failure", data["error"])
+
+    def test_success_returns_200_with_results_and_answer(self):
+        results = [{"content": "alpha"}]
+        with (
+            mock.patch.object(self.module, "semantic_search", return_value=results),
+            mock.patch.object(self.module, "generate_rag_answer", return_value="answer text"),
+        ):
+            status, data = self._post("/api/search", body={"query": "alpha query"})
+        self.assertEqual(status, 200)
+        self.assertEqual(data["query"], "alpha query")
+        self.assertEqual(data["results"], results)
+        self.assertEqual(data["answer"], "answer text")
 
 
 if __name__ == "__main__":
