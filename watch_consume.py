@@ -102,20 +102,31 @@ def embed_text(text: str) -> list[float]:
             f"Failed to embed text with Ollama at {OLLAMA_URL} using {EMBEDDING_MODEL}."
         ) from exc
 
-    embeddings = getattr(response_payload, "embeddings", None)
-    if embeddings is None and hasattr(response_payload, "get"):
-        embeddings = response_payload.get("embeddings")
+    return extract_embedding(response_payload)
 
-    if isinstance(embeddings, list) and embeddings:
-        first_embedding = embeddings[0]
-        if isinstance(first_embedding, list) and first_embedding:
-            return [float(value) for value in first_embedding]
-        if isinstance(first_embedding, (int, float)):
-            return [float(value) for value in embeddings]
+
+def extract_embedding(response_payload: object) -> list[float]:
+    if hasattr(response_payload, "embeddings"):
+        embeddings = response_payload.embeddings
+    elif isinstance(response_payload, dict):
+        embeddings = response_payload.get("embeddings")
+    else:
+        embeddings = None
+
+    if not isinstance(embeddings, list) or not embeddings:
+        raise RuntimeError(
+            f"Ollama returned an empty embedding for {EMBEDDING_MODEL}. "
+            "Ensure the model supports embeddings and is correctly configured."
+        )
+
+    first_embedding = embeddings[0]
+    if isinstance(first_embedding, list) and first_embedding:
+        return [float(value) for value in first_embedding]
+    if all(isinstance(value, (int, float)) for value in embeddings):
+        return [float(value) for value in embeddings]
 
     raise RuntimeError(
-        f"Ollama returned an empty embedding for {EMBEDDING_MODEL}. "
-        "Ensure the model supports embeddings and is correctly configured."
+        f"Ollama returned an unsupported embedding shape for {EMBEDDING_MODEL}."
     )
 
 
