@@ -91,19 +91,25 @@ def write_markdown(pdf_path: Path, page_number: int, markdown: str) -> Path:
 
 
 def process_pdf(pdf_path: Path) -> None:
-    print(f"Processing {pdf_path.name}")
+    print(f"[{pdf_path.name}] Processing started")
+    print(f"[{pdf_path.name}] Rendering PDF pages to PNG images")
     png_paths = render_pdf_to_pngs(pdf_path)
+    print(f"[{pdf_path.name}] Rendered {len(png_paths)} page(s)")
     try:
         for page_number, png_path in enumerate(png_paths, start=1):
+            print(f"[{pdf_path.name}] OCR page {page_number}/{len(png_paths)}: {png_path.name}")
             markdown = ocr_png_to_markdown(png_path)
-            write_markdown(pdf_path, page_number, markdown)
+            output_path = write_markdown(pdf_path, page_number, markdown)
+            print(f"[{pdf_path.name}] Wrote markdown: {output_path.name}")
     finally:
+        print(f"[{pdf_path.name}] Cleaning up temporary images")
         for png_path in png_paths:
             if png_path.exists():
                 png_path.unlink()
 
+    print(f"[{pdf_path.name}] Removing source PDF")
     pdf_path.unlink()
-    print(f"Finished {pdf_path.name}")
+    print(f"[{pdf_path.name}] Processing finished")
 
 
 def watch_consume_folder() -> None:
@@ -121,6 +127,10 @@ def watch_consume_folder() -> None:
 
             previous = pending.get(pdf_path)
             if previous is None:
+                print(
+                    f"[{pdf_path.name}] Detected in consume/; waiting for file stability "
+                    f"({STABLE_POLLS_REQUIRED} poll(s) required)"
+                )
                 pending[pdf_path] = (signature[0], signature[1], 1)
                 continue
 
@@ -133,6 +143,7 @@ def watch_consume_folder() -> None:
             pending[pdf_path] = (signature[0], signature[1], stable_count)
 
             if stable_count >= STABLE_POLLS_REQUIRED:
+                print(f"[{pdf_path.name}] File is stable; starting processing")
                 try:
                     process_pdf(pdf_path)
                 except Exception as exc:
