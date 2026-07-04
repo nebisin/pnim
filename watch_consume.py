@@ -273,8 +273,8 @@ def semantic_search(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict[
             }
         )
 
-    scored_results.sort(key=lambda row: row["score"], reverse=True)
-    return scored_results[:limit]
+    import heapq
+    return heapq.nlargest(limit, scored_results, key=lambda row: row["score"])
 
 
 def generate_rag_answer(query: str, results: list[dict[str, object]]) -> str:
