@@ -334,6 +334,8 @@ def handle_search_request(request_payload: object) -> dict[str, object]:
     # bool is a subclass of int in Python, so explicitly reject it.
     if not isinstance(limit, int) or isinstance(limit, bool):
         raise ValueError("limit must be an integer")
+    if limit > 50:
+        raise ValueError("limit must be at most 50")
 
     include_answer = request_payload.get("include_answer", True)
     if not isinstance(include_answer, bool):
