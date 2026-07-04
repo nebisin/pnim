@@ -26,9 +26,11 @@ ollama serve
 
 ## Setup
 
-Install the Python dependency:
+Create and activate a virtual environment, then install the Python dependency:
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 

@@ -80,6 +80,7 @@ def ocr_png_to_markdown(png_path: Path) -> str:
     try:
         with urllib.request.urlopen(request, timeout=600) as response:
             response_payload = json.loads(response.read().decode("utf-8"))
+            print(json.dumps(response_payload, indent=2, ensure_ascii=False))
     except urllib.error.URLError as exc:  # pragma: no cover
         raise RuntimeError(
             f"Failed to OCR {png_path.name} with Ollama at {OLLAMA_URL}."
