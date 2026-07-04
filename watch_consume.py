@@ -61,10 +61,9 @@ def render_pdf_to_pngs(pdf_path: Path) -> list[Path]:
 
 def ocr_png_to_markdown(png_path: Path) -> str:
     try:
-        response_payload = OLLAMA_CLIENT.generate(
+        response_payload = OLLAMA_CLIENT.chat(
             model=OLLAMA_MODEL,
-            prompt=OCR_PROMPT,
-            images=[png_path],
+            messages=[{"role": "user", "content": OCR_PROMPT, "images": [png_path]}],
             stream=False,
         )
     except ResponseError as exc:  # pragma: no cover
@@ -76,7 +75,7 @@ def ocr_png_to_markdown(png_path: Path) -> str:
             f"Failed to OCR {png_path.name} with Ollama at {OLLAMA_URL}."
         ) from exc
 
-    markdown = (response_payload.response or "").strip()
+    markdown = (response_payload.message.content or "").strip()
     if not markdown:
         raise RuntimeError(
             f"Ollama returned an empty response for {png_path.name}. "
