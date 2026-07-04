@@ -142,7 +142,7 @@ def watch_consume_folder() -> None:
 
             pending[pdf_path] = (signature[0], signature[1], stable_count)
 
-            if stable_count >= STABLE_POLLS_REQUIRED:
+            if stable_count >= STABLE_POLLS_REQUIRED and (previous_mtime_ns, previous_size) == signature:
                 print(f"[{pdf_path.name}] File is stable; starting processing")
                 try:
                     process_pdf(pdf_path)
