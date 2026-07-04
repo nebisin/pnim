@@ -64,7 +64,7 @@ def ocr_png_to_markdown(png_path: Path) -> str:
         response_payload = OLLAMA_CLIENT.generate(
             model=OLLAMA_MODEL,
             prompt=OCR_PROMPT,
-            images=[str(png_path)],
+            images=[png_path],
             stream=False,
         )
     except ResponseError as exc:  # pragma: no cover
@@ -76,7 +76,7 @@ def ocr_png_to_markdown(png_path: Path) -> str:
             f"Failed to OCR {png_path.name} with Ollama at {OLLAMA_URL}."
         ) from exc
 
-    return response_payload.get("response", "").strip()
+    return response_payload.response.strip()
 
 
 def write_markdown(pdf_path: Path, page_number: int, markdown: str) -> Path:
