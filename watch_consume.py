@@ -330,7 +330,7 @@ def handle_search_request(request_payload: object) -> dict[str, object]:
         raise ValueError("query must be a non-empty string")
 
     limit = request_payload.get("limit", DEFAULT_SEARCH_LIMIT)
-    if isinstance(limit, bool) or not isinstance(limit, int):
+    if type(limit) is bool or not isinstance(limit, int):
         raise ValueError("limit must be an integer")
 
     include_answer = request_payload.get("include_answer", True)
@@ -372,7 +372,7 @@ class SearchApiHandler(BaseHTTPRequestHandler):
         self.write_json(response_payload, HTTPStatus.OK)
 
     def log_message(self, format: str, *args: object) -> None:
-        return
+        pass
 
     def write_json(self, payload: dict[str, object], status: HTTPStatus) -> None:
         body = json.dumps(payload).encode("utf-8")
