@@ -366,6 +366,9 @@ class SearchApiHandler(BaseHTTPRequestHandler):
             raw_body = self.rfile.read(content_length) if content_length > 0 else b""
             request_payload = json.loads(raw_body.decode("utf-8") or "{}")
             response_payload = handle_search_request(request_payload)
+        except UnicodeDecodeError:
+            self.write_json({"error": "request body must be UTF-8 encoded"}, HTTPStatus.BAD_REQUEST)
+            return
         except json.JSONDecodeError:
             self.write_json({"error": "request body must contain valid JSON"}, HTTPStatus.BAD_REQUEST)
             return
