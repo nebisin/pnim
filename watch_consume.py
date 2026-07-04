@@ -33,6 +33,10 @@ OCR_PROMPT = (
 OLLAMA_CLIENT = Client(host=OLLAMA_URL)
 
 
+def response_error_message(exc: ResponseError) -> str:
+    return getattr(exc, "error", str(exc))
+
+
 def ensure_directories() -> None:
     CONSUME_DIR.mkdir(parents=True, exist_ok=True)
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -74,7 +78,7 @@ def ocr_png_to_markdown(png_path: Path) -> str:
         )
     except ResponseError as exc:  # pragma: no cover
         raise RuntimeError(
-            f"Ollama request failed for {png_path.name}: {exc.error}"
+            f"Ollama request failed for {png_path.name}: {response_error_message(exc)}"
         ) from exc
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(
@@ -95,7 +99,7 @@ def embed_text(text: str) -> list[float]:
         response_payload = OLLAMA_CLIENT.embed(model=EMBEDDING_MODEL, input=text)
     except ResponseError as exc:  # pragma: no cover
         raise RuntimeError(
-            f"Ollama embedding request failed for {EMBEDDING_MODEL}: {exc.error}"
+            f"Ollama embedding request failed for {EMBEDDING_MODEL}: {response_error_message(exc)}"
         ) from exc
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(
@@ -132,7 +136,8 @@ def extract_embedding(response_payload: object) -> list[float]:
 
 def write_markdown(pdf_path: Path, page_number: int, markdown: str) -> Path:
     output_path = TEXTS_DIR / f"{pdf_path.stem}_page_{page_number:04d}.md"
-    output_path.write_text(markdown + ("\n" if markdown and not markdown.endswith("\n") else ""), encoding="utf-8")
+    content = markdown if not markdown or markdown.endswith("\n") else f"{markdown}\n"
+    output_path.write_text(content, encoding="utf-8")
     return output_path
 
 
