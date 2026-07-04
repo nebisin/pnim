@@ -1,0 +1,155 @@
+from __future__ import annotations
+
+import base64
+import json
+import os
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Dict, Iterable, Optional
+
+try:
+    import fitz  # type: ignore[import-not-found]  # PyMuPDF
+except ImportError as exc:  # pragma: no cover
+    raise SystemExit(
+        "PyMuPDF is required. Install it with: pip install -r requirements.txt"
+    ) from exc
+
+CONSUME_DIR = Path("consume")
+IMAGES_DIR = Path("images")
+TEXTS_DIR = Path("texts")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "deepseek-ocr:latest")
+POLL_INTERVAL_SECONDS = float(os.environ.get("POLL_INTERVAL_SECONDS", "2"))
+STABLE_POLLS_REQUIRED = int(os.environ.get("STABLE_POLLS_REQUIRED", "2"))
+OCR_PROMPT = (
+    "Extract all text from the image and return clean markdown only. "
+    "Preserve headings, lists, tables, and reading order as faithfully as possible."
+)
+
+
+def ensure_directories() -> None:
+    CONSUME_DIR.mkdir(parents=True, exist_ok=True)
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    TEXTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def pdf_files() -> Iterable[Path]:
+    yield from sorted(CONSUME_DIR.glob("*.pdf"))
+
+
+def stat_signature(path: Path) -> tuple[int, int]:
+    stat_result = path.stat()
+    return stat_result.st_mtime_ns, stat_result.st_size
+
+
+def render_pdf_to_pngs(pdf_path: Path) -> list[Path]:
+    document = fitz.open(pdf_path)
+    png_paths: list[Path] = []
+    try:
+        for page_number in range(document.page_count):
+            page = document.load_page(page_number)
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+            png_path = IMAGES_DIR / f"{pdf_path.stem}_page_{page_number + 1:04d}.png"
+            pixmap.save(png_path.as_posix())
+            png_paths.append(png_path)
+    finally:
+        document.close()
+    return png_paths
+
+
+def ocr_png_to_markdown(png_path: Path) -> str:
+    with png_path.open("rb") as handle:
+        image_bytes = handle.read()
+
+    payload = {
+        "model": OLLAMA_MODEL,
+        "prompt": OCR_PROMPT,
+        "images": [base64.b64encode(image_bytes).decode("ascii")],
+        "stream": False,
+    }
+
+    request = urllib.request.Request(
+        f"{OLLAMA_URL.rstrip('/')}/api/generate",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=600) as response:
+            response_payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.URLError as exc:  # pragma: no cover
+        raise RuntimeError(
+            f"Failed to OCR {png_path.name} with Ollama at {OLLAMA_URL}."
+        ) from exc
+
+    return response_payload.get("response", "").strip()
+
+
+def write_markdown(pdf_path: Path, page_number: int, markdown: str) -> Path:
+    output_path = TEXTS_DIR / f"{pdf_path.stem}_page_{page_number:04d}.md"
+    output_path.write_text(markdown + ("\n" if markdown and not markdown.endswith("\n") else ""), encoding="utf-8")
+    return output_path
+
+
+def process_pdf(pdf_path: Path) -> None:
+    print(f"Processing {pdf_path.name}")
+    png_paths = render_pdf_to_pngs(pdf_path)
+    try:
+        for page_number, png_path in enumerate(png_paths, start=1):
+            markdown = ocr_png_to_markdown(png_path)
+            write_markdown(pdf_path, page_number, markdown)
+    finally:
+        for png_path in png_paths:
+            if png_path.exists():
+                png_path.unlink()
+
+    pdf_path.unlink()
+    print(f"Finished {pdf_path.name}")
+
+
+def watch_consume_folder() -> None:
+    ensure_directories()
+    pending: Dict[Path, tuple[int, int, int]] = {}
+
+    while True:
+        current_pdfs = set(pdf_files())
+
+        for pdf_path in current_pdfs:
+            try:
+                signature = stat_signature(pdf_path)
+            except FileNotFoundError:
+                continue
+
+            previous = pending.get(pdf_path)
+            if previous is None:
+                pending[pdf_path] = (signature[0], signature[1], 1)
+                continue
+
+            previous_mtime_ns, previous_size, stable_count = previous
+            if (previous_mtime_ns, previous_size) == signature:
+                stable_count += 1
+            else:
+                stable_count = 1
+
+            pending[pdf_path] = (signature[0], signature[1], stable_count)
+
+            if stable_count >= STABLE_POLLS_REQUIRED:
+                try:
+                    process_pdf(pdf_path)
+                except Exception as exc:
+                    print(f"Failed to process {pdf_path.name}: {exc}")
+                finally:
+                    pending.pop(pdf_path, None)
+
+        for tracked_path in list(pending):
+            if tracked_path not in current_pdfs:
+                pending.pop(tracked_path, None)
+
+        time.sleep(POLL_INTERVAL_SECONDS)
+
+
+if __name__ == "__main__":
+    watch_consume_folder()
