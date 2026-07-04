@@ -278,6 +278,9 @@ def semantic_search(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> list[dict[
 
 
 def generate_rag_answer(query: str, results: list[dict[str, object]]) -> str:
+    if not results:
+        return "No matching context was found."
+
     context_blocks = []
     for result in results:
         context_blocks.append(
@@ -292,7 +295,9 @@ def generate_rag_answer(query: str, results: list[dict[str, object]]) -> str:
             )
         )
 
-    context = "\n\n---\n\n".join(context_blocks) if context_blocks else "No matching context was found."
+    context = "\n\n---\n\n".join(context_blocks)
+    # Prevent sending unbounded context to the chat model.
+    context = context[:20000]
     user_prompt = (
         f"Question: {query.strip()}\n\n"
         f"Context:\n{context}\n\n"
