@@ -63,7 +63,7 @@ def ocr_png_to_markdown(png_path: Path) -> str:
     try:
         response_payload = OLLAMA_CLIENT.chat(
             model=OLLAMA_MODEL,
-            messages=[{"role": "user", "content": OCR_PROMPT, "images": [png_path]}],
+            messages=[{"role": "user", "content": OCR_PROMPT, "images": [str(png_path)]}],
             stream=False,
         )
     except ResponseError as exc:  # pragma: no cover
