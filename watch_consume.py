@@ -76,7 +76,13 @@ def ocr_png_to_markdown(png_path: Path) -> str:
             f"Failed to OCR {png_path.name} with Ollama at {OLLAMA_URL}."
         ) from exc
 
-    return response_payload.response.strip()
+    markdown = (response_payload.response or "").strip()
+    if not markdown:
+        raise RuntimeError(
+            f"Ollama returned an empty response for {png_path.name}. "
+            "Ensure the model supports vision (multimodal) input and is correctly configured."
+        )
+    return markdown
 
 
 def write_markdown(pdf_path: Path, page_number: int, markdown: str) -> Path:
