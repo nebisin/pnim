@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import base64
-import json
 import os
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
-from typing import Dict, Iterable, Optional
+from typing import Dict, Iterable
+
+from ollama import Client, ResponseError
 
 try:
     import fitz  # type: ignore[import-not-found]  # PyMuPDF
@@ -27,6 +25,8 @@ OCR_PROMPT = (
     "Extract all text from the image and return clean markdown only. "
     "Preserve headings, lists, tables, and reading order as faithfully as possible."
 )
+
+OLLAMA_CLIENT = Client(host=OLLAMA_URL)
 
 
 def ensure_directories() -> None:
@@ -60,28 +60,18 @@ def render_pdf_to_pngs(pdf_path: Path) -> list[Path]:
 
 
 def ocr_png_to_markdown(png_path: Path) -> str:
-    with png_path.open("rb") as handle:
-        image_bytes = handle.read()
-
-    payload = {
-        "model": OLLAMA_MODEL,
-        "prompt": OCR_PROMPT,
-        "images": [base64.b64encode(image_bytes).decode("ascii")],
-        "stream": False,
-    }
-
-    request = urllib.request.Request(
-        f"{OLLAMA_URL.rstrip('/')}/api/generate",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
     try:
-        with urllib.request.urlopen(request, timeout=600) as response:
-            response_payload = json.loads(response.read().decode("utf-8"))
-            print(json.dumps(response_payload, indent=2, ensure_ascii=False))
-    except urllib.error.URLError as exc:  # pragma: no cover
+        response_payload = OLLAMA_CLIENT.generate(
+            model=OLLAMA_MODEL,
+            prompt=OCR_PROMPT,
+            images=[str(png_path)],
+            stream=False,
+        )
+    except ResponseError as exc:  # pragma: no cover
+        raise RuntimeError(
+            f"Ollama request failed for {png_path.name}: {exc.error}"
+        ) from exc
+    except Exception as exc:  # pragma: no cover
         raise RuntimeError(
             f"Failed to OCR {png_path.name} with Ollama at {OLLAMA_URL}."
         ) from exc
